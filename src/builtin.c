@@ -1189,6 +1189,9 @@ static jv f_string_implode(jq_state *jq, jv a) {
   return jv_string_implode(a);
 }
 
+// hash the given string, using object-slot hash table func returning number. todo: support other hashes (dbf2!)
+static jv f_hash(jq_state *jq, jv a) { return jv_number(jv_string_hash(a)); }
+
 static jv f_setpath(jq_state *jq, jv a, jv b, jv c) { return jv_setpath(a, b, c); }
 extern jv _jq_path_append(jq_state *, jv, jv, jv);
 static jv f_getpath(jq_state *jq, jv a, jv b) {
@@ -1702,6 +1705,7 @@ static const struct cfunction function_list[] = {
   {(cfunction_ptr)f_string_explode, "explode", 1},
   {(cfunction_ptr)f_string_implode, "implode", 1},
   {(cfunction_ptr)f_string_indexes, "_strindices", 2},
+  {(cfunction_ptr)f_hash, "hash", 1},
   {(cfunction_ptr)f_setpath, "setpath", 3}, // FIXME typechecking
   {(cfunction_ptr)f_getpath, "getpath", 2},
   {(cfunction_ptr)f_delpaths, "delpaths", 2},
