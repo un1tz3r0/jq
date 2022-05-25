@@ -1189,8 +1189,64 @@ static jv f_string_implode(jq_state *jq, jv a) {
   return jv_string_implode(a);
 }
 
+#include "../modules/xxhash-clean/xxhash64-ref.c"
+
 // hash the given string, using object-slot hash table func returning number. todo: support other hashes (dbf2!)
-static jv f_hash(jq_state *jq, jv a) { return jv_number(jv_string_hash(a)); }
+static jv f_hash(jq_state *jq, jv input, jv b) {
+	if (jv_get_kind(b) != JV_KIND_STRING) {
+    jv_free(input);
+		return ret_error(b, jv_string("hash/1 argument must be a string specifying the hash algorithm: jv xxh64a xxh64h"));
+	}
+	const char* fmt_s = jv_string_value(b);
+  if (!strcmp(fmt_s, "jv")) {
+    jv_free(b);
+		jv result = jv_number(jv_string_hash(input));
+		jv_free(input);
+		return result;
+	}
+  else if (!strcmp(fmt_s, "xxh64a") || !strcmp(fmt_s, "xxh64h")) {
+		int hexout = !strcmp(fmt_s, "xxh64h");
+    // free the hash function name argument
+		jv_free(b);
+		// get the input as a string
+    input = f_tostring(jq, input);
+		// get the string's char array and size
+    const unsigned char* data = (const unsigned char*)jv_string_value(input);
+    int len = jv_string_length_bytes(jv_copy(input));
+		// hash the input string to a 64-bit unsigned int using XXH64 with seed 0 (FIXME: allow passing seed to hash/2?)
+		uint64_t hval = XXH64(data, len, 0);
+		// free the input string
+		jv_free(input);
+		if(!hexout)
+		{
+			// create an initially empty output array and fill it with 8 bytes
+	    jv out = jv_array();
+			for(int i = sizeof(hval) - 1; i >= 0; i--)
+	    {
+				out = jv_array_append(out, jv_number((hval >> ((sizeof(hval)-i)*8)) & 0x0ff));
+	    }
+			return out;
+		}
+		else
+		{
+			// give 16-digit hex representation as string
+			unsigned char outstr[sizeof(hval)*2+1];
+			outstr[sizeof(hval)*2] = 0x00;
+			for(int i = sizeof(hval) - 1; i >= 0; i--)
+			{
+				uint8_t outbyte = (hval >> (i*8)) & 0x0ff;
+				outstr[i*2] = "0123456789abcdef"[(outbyte >> 4)&0x0f];
+				outstr[i*2+1] = "0123456789abcdef"[(outbyte >> 0)&0x0f];
+			}
+			return jv_string(outstr);
+		}
+	}
+	else
+	{
+    jv_free(input);
+		return ret_error(b, jv_string("hash/1 argument must be a string specifying the hash algorithm: jv xxh64"));
+	}
+}
 
 static jv f_setpath(jq_state *jq, jv a, jv b, jv c) { return jv_setpath(a, b, c); }
 extern jv _jq_path_append(jq_state *, jv, jv, jv);
@@ -1705,7 +1761,7 @@ static const struct cfunction function_list[] = {
   {(cfunction_ptr)f_string_explode, "explode", 1},
   {(cfunction_ptr)f_string_implode, "implode", 1},
   {(cfunction_ptr)f_string_indexes, "_strindices", 2},
-  {(cfunction_ptr)f_hash, "hash", 1},
+  {(cfunction_ptr)f_hash, "hash", 2},
   {(cfunction_ptr)f_setpath, "setpath", 3}, // FIXME typechecking
   {(cfunction_ptr)f_getpath, "getpath", 2},
   {(cfunction_ptr)f_delpaths, "delpaths", 2},
