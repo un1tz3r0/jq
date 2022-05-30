@@ -1189,13 +1189,18 @@ static jv f_string_implode(jq_state *jq, jv a) {
   return jv_string_implode(a);
 }
 
-#include "../modules/xxhash-clean/xxhash64-ref.c"
+// FIXME: add the xxhash-clean submodule to the autotools build system 
+// and jettison this quick and dirty shenanigan. is there such thing as a 
+// singular of shenanigans? FIXME: determine what the singular form of 
+// "shenanigans" is and document these changes better.
+
+#include "../modules/xxhash-clean/xxhash64-ref.c" // UGH!
 
 // hash the given string, using object-slot hash table func returning number. todo: support other hashes (dbf2!)
 static jv f_hash(jq_state *jq, jv input, jv b) {
 	if (jv_get_kind(b) != JV_KIND_STRING) {
     jv_free(input);
-		return ret_error(b, jv_string("hash/1 argument must be a string specifying the hash algorithm: jv xxh64a xxh64h"));
+		return ret_error(b, jv_string("hash/1 argument must be a string specifying the hash algorithm: jv xxh64a xxh64h xxh64i"));
 	}
 	const char* fmt_s = jv_string_value(b);
   if (!strcmp(fmt_s, "jv")) {
@@ -1204,8 +1209,9 @@ static jv f_hash(jq_state *jq, jv input, jv b) {
 		jv_free(input);
 		return result;
 	}
-  else if (!strcmp(fmt_s, "xxh64a") || !strcmp(fmt_s, "xxh64h")) {
+  else if (!strcmp(fmt_s, "xxh64a") || !strcmp(fmt_s, "xxh64h") ||  !strcmp(fmt_s, "xxh64i")) {
 		int hexout = !strcmp(fmt_s, "xxh64h");
+		int longout = !strcmp(fmt_s, "xxh64i");
     // free the hash function name argument
 		jv_free(b);
 		// get the input as a string
@@ -1217,17 +1223,16 @@ static jv f_hash(jq_state *jq, jv input, jv b) {
 		uint64_t hval = XXH64(data, len, 0);
 		// free the input string
 		jv_free(input);
-		if(!hexout)
+		
+		if(longout)
 		{
-			// create an initially empty output array and fill it with 8 bytes
+			// create an initially empty output array and fill it with two 32-bit unsigned ints, the high and low halves of the 64 bit hash
 	    jv out = jv_array();
-			for(int i = sizeof(hval) - 1; i >= 0; i--)
-	    {
-				out = jv_array_append(out, jv_number((hval >> ((sizeof(hval)-i)*8)) & 0x0ff));
-	    }
+			out = jv_array_append(out, jv_number((hval >> 0) & 0x0ffffffff));
+			out = jv_array_append(out, jv_number((hval >> 32) & 0x0ffffffff));
 			return out;
 		}
-		else
+		else if(hexout)
 		{
 			// give 16-digit hex representation as string
 			unsigned char outstr[sizeof(hval)*2+1];
@@ -1239,6 +1244,16 @@ static jv f_hash(jq_state *jq, jv input, jv b) {
 				outstr[i*2+1] = "0123456789abcdef"[(outbyte >> 0)&0x0f];
 			}
 			return jv_string(outstr);
+		}
+		else // emit array of 8 bytes with 64-bit xxhash of input
+		{
+			// create an initially empty output array and fill it with 8 bytes
+	    jv out = jv_array();
+			for(int i = sizeof(hval) - 1; i >= 0; i--)
+	    {
+				out = jv_array_append(out, jv_number((hval >> ((sizeof(hval)-i)*8)) & 0x0ff));
+	    }
+			return out;
 		}
 	}
 	else

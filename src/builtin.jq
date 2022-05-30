@@ -291,3 +291,16 @@ def JOIN($idx; stream; idx_expr; join_expr):
   stream | [., $idx[idx_expr]] | join_expr;
 def IN(s): any(s == .; .);
 def IN(src; s): any(src == s; .);
+
+# radix base conversion
+# input string is converted from "base" to an integer, within limits
+# of the underlying arithmetic operations, and without error-checking:
+def to_i(base):
+  explode
+  | reverse
+  | map(if . > 96  then . - 87 else . - 48 end)  # "a" ~ 97 => 10 ~ 87
+  | reduce .[] as $c
+      # state: [power, ans]
+      ([1,0]; (.[0] * base) as $b | [$b, .[1] + (.[0] * $c)])
+  | .[1];
+
